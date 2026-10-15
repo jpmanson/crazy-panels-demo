@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>crazy-panels · WAM synth</title>
+    <style>
+        html, body { margin: 0; background: #0e0f12; color: #c8ccd2; font: 13px system-ui, sans-serif; }
+        main { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 24px; }
+        #mount { min-height: 440px; display: flex; align-items: center; justify-content: center; }
+        button { font: inherit; padding: 6px 12px; border-radius: 6px; border: 1px solid #3a3f47; background: #1c1f24; color: #e8ecf0; cursor: pointer; }
+        button:disabled { opacity: 0.4; cursor: default; }
+        .bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: center; }
+        #status { color: #8a939e; }
+    </style>
+</head>
+<body>
+<main>
+    <div class="bar">
+        <button id="start">Start audio</button>
+        <span id="status">A Web Audio Module 2.0: a crazy-panels panel drives a Rust synth in an AudioWorklet.</span>
+    </div>
+    <div id="mount"></div>
+    <div class="bar">
+        <span>As a host:</span>
+        <button id="chord" disabled>Play a chord (MIDI events)</button>
+        <button id="sweep" disabled>Sweep the cutoff (automation)</button>
+        <button id="state" disabled>Save and restore the state</button>
+    </div>
+</main>
+<script type="module">
+    // This page is a small WAM host: it loads the module as any host would, from its URL
+    const status = document.querySelector('#status');
+    const say = (text) => (status.textContent = text);
+    const buttons = ['#chord', '#sweep', '#state'].map((s) => document.querySelector(s));
+
+    document.querySelector('#start').addEventListener('click', async (e) => {
+        e.target.disabled = true;
+        try {
+            const context = new AudioContext({ latencyHint: 'interactive' });
+            // The SDK's environment on request (fetched from unpkg), this demo's otherwise
+            const useSdk = new URLSearchParams(location.search).get('env') === 'sdk';
+            const { initializeWamHost } = useSdk
+                ? { initializeWamHost: (await import('https://unpkg.com/@webaudiomodules/sdk@0.0.12/src/initializeWamHost.js')).default }
+                : await import('./host/wam-env.js');
+            const [groupId] = await initializeWamHost(context);
+
+            const { default: Wam } = await import('./wam/index.js');
+            const wam = await Wam.createInstance(groupId, context);
+            wam.audioNode.connect(context.destination);
+            const gui = await wam.createGui();
+            document.querySelector('#mount').replaceChildren(gui);
+            await context.resume();
+            say(`${wam.name}: ${useSdk ? "the SDK's" : "this page's"} WAM environment, level over ${
+                crossOriginIsolated ? 'shared memory (SharedArrayBuffer)' : 'messages (the page is not cross-origin isolated)'
+            }, ${context.sampleRate} Hz.`);
+            wire(wam, context);
+            buttons.forEach((b) => (b.disabled = false));
+        } catch (err) {
+            console.error(err);
+            say(`Could not start: ${err}`);
+            e.target.disabled = false;
+        }
+    });
+
+    function wire(wam, context) {
+        const node = wam.audioNode;
+        // A C major chord for a second, as a host's MIDI track would send it
+        buttons[0].onclick = () => {
+            const t = context.currentTime + 0.05;
+            const notes = [60, 64, 67, 72];
+            node.scheduleEvents(
+                ...notes.map((n, i) => ({ type: 'wam-midi', time: t + i * 0.08, data: { bytes: [0x90, n, 100] } })),
+                ...notes.map((n) => ({ type: 'wam-midi', time: t + 1.2, data: { bytes: [0x80, n, 0] } })),
+            );
+        };
+        // Automation: the cutoff down and back up over two seconds, as scheduled events
+        buttons[1].onclick = () => {
+            const t = context.currentTime + 0.05;
+            const steps = 40;
+            const events = [];
+            for (let i = 0; i <= steps; i++) {
+                const x = i / steps;
+                events.push({ type: 'wam-automation', time: t + x * 2, data: { id: 'cutoff', value: 0.25 + 0.6 * Math.abs(1 - 2 * x), normalized: true } });
+            }
+            node.scheduleEvents(...events);
+            buttons[0].onclick();
+        };
+        // State: saved, scrambled, restored
+        buttons[2].onclick = async () => {
+            const saved = await node.getState();
+            await node.setParameterValues({ resonance: { id: 'resonance', value: 0.95, normalized: true }, volume: { id: 'volume', value: 0.3, normalized: true } });
+            say('State changed: resonance 95 %, volume 30 %. Restoring in a second…');
+            setTimeout(async () => {
+                await node.setState(saved);
+                say(`State restored: ${JSON.stringify((await node.getState()).values)}`);
+            }, 1000);
+        };
+    }
+</script>
+</body>
+</html>

@@ -1,0 +1,1 @@
+export function has_property(obj, key) { return obj != null && key in obj && obj[key] != null; }
