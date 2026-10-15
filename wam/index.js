@@ -57,8 +57,9 @@ class ParameterInfo {
 
 const INFO = Object.fromEntries(PARAMS.map((p) => [p.id, new ParameterInfo(p)]));
 
-/** The sound's wasm, compiled once per page. */
-let dspModule;
+/** The sound's wasm bytes, fetched once per page; each processor compiles its copy (Safari does not
+ * pass compiled modules to a worklet). */
+let dspBytes;
 /** The processor's code, added once per audio context. */
 const processorLoaded = new WeakMap();
 
@@ -77,10 +78,19 @@ export class CrazyPanelsSynthNode extends AudioWorkletNode {
         /** The GUI's listeners for parameter changes that did not come from it. */
         this.paramListeners = new Set();
         this.port.onmessage = (e) => this.onMessage(e.data);
+        // Failures in the audio thread reach the page as a `cp-error` event
+        this.addEventListener('processorerror', () => this.failed('the audio processor stopped'));
+    }
+
+    failed(message) {
+        console.error(`crazy-panels synth: ${message}`);
+        this.dispatchEvent(new CustomEvent('cp-error', { detail: message }));
     }
 
     onMessage(m) {
-        if (m.type === 'level') {
+        if (m.type === 'error') {
+            this.failed(m.message);
+        } else if (m.type === 'level') {
             this.lastLevel = m.value;
         } else if (m.type === 'processed') {
             for (const event of m.events) {
@@ -218,11 +228,11 @@ export default class CrazyPanelsSynth {
     }
 
     async createAudioNode(state) {
-        dspModule ??= WebAssembly.compileStreaming(fetch(here('./dsp.wasm')));
+        dspBytes ??= fetch(here('./dsp.wasm')).then((r) => r.arrayBuffer());
         if (!processorLoaded.has(this.audioContext)) {
             processorLoaded.set(this.audioContext, this.audioContext.audioWorklet.addModule(here('./processor.js')));
         }
-        const [module] = await Promise.all([dspModule, processorLoaded.get(this.audioContext)]);
+        const [dsp] = await Promise.all([dspBytes, processorLoaded.get(this.audioContext)]);
         const values = Object.fromEntries(PARAMS.map((p) => [p.id, p.defaultValue]));
         Object.assign(values, state?.values ?? {});
         // The level is shared memory where the page allows it (cross-origin isolation)
@@ -235,7 +245,7 @@ export default class CrazyPanelsSynth {
                 groupId: this.groupId,
                 moduleId: this.moduleId,
                 instanceId: this.instanceId,
-                module,
+                dsp,
                 values,
                 level,
             },

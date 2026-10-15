@@ -16,7 +16,13 @@ class CrazyPanelsSynthProcessor extends AudioWorkletProcessor {
         this.groupId = o.groupId;
         this.moduleId = o.moduleId;
         this.instanceId = o.instanceId;
-        this.dsp = new WebAssembly.Instance(o.module, {}).exports;
+        this.alive = false;
+        try {
+            this.dsp = new WebAssembly.Instance(new WebAssembly.Module(o.dsp), {}).exports;
+        } catch (e) {
+            this.port.postMessage({ type: 'error', message: `the sound's wasm does not load: ${e}` });
+            return;
+        }
         this.synth = this.dsp.synth_new(sampleRate);
         this.values = PARAMS.map((id) => o.values[id]);
         this.values.forEach((v, i) => this.dsp.synth_set(this.synth, i, v));
@@ -86,7 +92,7 @@ class CrazyPanelsSynthProcessor extends AudioWorkletProcessor {
     }
 
     destroy() {
-        if (!this.alive) return;
+        if (!this.alive || !this.dsp) return;
         this.alive = false;
         try {
             globalThis.webAudioModules?.removeWam(this);
@@ -133,6 +139,7 @@ class CrazyPanelsSynthProcessor extends AudioWorkletProcessor {
     }
 
     process(inputs, outputs) {
+        // Not loaded (or destroyed): silence, and no more calls
         if (!this.alive) return false;
         const output = outputs[0];
         if (!output || !output[0]) return true;

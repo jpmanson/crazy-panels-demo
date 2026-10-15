@@ -37,7 +37,15 @@
     document.querySelector('#start').addEventListener('click', async (e) => {
         e.target.disabled = true;
         try {
+            // iOS: as media playback, so the ring/silent setting does not mute it (Safari 16.4+)
+            if (navigator.audioSession) navigator.audioSession.type = 'playback';
             const context = new AudioContext({ latencyHint: 'interactive' });
+            // Started within the tap: Safari only lets a page start audio inside a user gesture
+            const resumed = context.resume();
+            // Suspended later (another app, a call): any tap brings it back
+            document.addEventListener('pointerdown', () => {
+                if (context.state !== 'running') context.resume();
+            });
             // The SDK's environment on request (fetched from unpkg), this demo's otherwise
             const useSdk = new URLSearchParams(location.search).get('env') === 'sdk';
             const { initializeWamHost } = useSdk
@@ -47,13 +55,18 @@
 
             const { default: Wam } = await import('./wam/index.js');
             const wam = await Wam.createInstance(groupId, context);
+            let failure = null;
+            wam.audioNode.addEventListener('cp-error', (e) => say((failure = `The sound failed to start: ${e.detail}`)));
             wam.audioNode.connect(context.destination);
             const gui = await wam.createGui();
             document.querySelector('#mount').replaceChildren(gui);
-            await context.resume();
-            say(`${wam.name}: ${useSdk ? "the SDK's" : "this page's"} WAM environment, level over ${
+            await resumed;
+            // The audio state is shown too: "suspended" means the browser did not let it start
+            const show = () => failure ?? say(`${wam.name}: ${useSdk ? "the SDK's" : "this page's"} WAM environment, level over ${
                 crossOriginIsolated ? 'shared memory (SharedArrayBuffer)' : 'messages (the page is not cross-origin isolated)'
-            }, ${context.sampleRate} Hz.`);
+            }, ${context.sampleRate} Hz, audio ${context.state}.`);
+            show();
+            context.addEventListener('statechange', show);
             wire(wam, context);
             buttons.forEach((b) => (b.disabled = false));
         } catch (err) {
