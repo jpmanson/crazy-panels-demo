@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>crazy-panels · panel demo</title>
+  <style>
+    html, body { margin: 0; height: 100%; background: #14161a; color: #c9ccd3;
+                 font: 14px/1.4 -apple-system, system-ui, sans-serif; }
+    main { display: flex; flex-direction: column; align-items: center; justify-content: center;
+           height: 100%; box-sizing: border-box; padding: 8px 0; gap: 12px; }
+    #panel { width: min(96vw, 720px); height: min(60vw, 440px); border-radius: 12px; touch-action: none; }
+    #error { color: #ff7a1a; max-width: 400px; text-align: center; }
+    .hint { opacity: 0.55; font-size: 12px; padding: 0 12px; text-align: center; }
+    .hint a { color: inherit; }
+  </style>
+</head>
+<body>
+  <main>
+    <canvas id="panel"></canvas>
+    <div id="error"></div>
+    <div class="hint">panel loaded from a KDL document · <a href="?">filter</a> · <a href="?mixer">mixer</a> · <a href="?compressor">compressor</a> · <a href="?analyzer">analyzer</a> · <a href="?vintage">vintage</a> · <a href="?browser">browser</a> · <a href="?console">console</a> · <a href="?synth">synth</a> · <a href="?hardware">hardware</a> · <a href="?knobs">knobs</a> · <a href="?vectors">vectors</a> · <a href="?symbols">symbols</a> · <a href="?animations">animations</a> · <a href="?tubes">tubes</a> · Tab moves between controls · right click for the menu</div>
+  </main>
+  <script type="module">
+    import init from "./pkg/panel_demo.js";
+    init().catch((e) => {
+      document.getElementById("error").textContent = String(e);
+      console.error(e);
+    });
+  </script>
+</body>
+</html>
