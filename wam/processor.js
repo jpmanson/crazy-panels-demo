@@ -6,7 +6,7 @@
 // level goes through a SharedArrayBuffer when the page is cross-origin isolated, and in a message
 // about 30 times a second when it is not.
 
-const PARAMS = ['cutoff', 'resonance', 'attack', 'release', 'volume'];
+const PARAMS = ['cutoff', 'resonance', 'attack', 'release', 'volume', 'bend', 'modulation'];
 const LEVEL_INTERVAL = 1 / 30;
 
 class CrazyPanelsSynthProcessor extends AudioWorkletProcessor {

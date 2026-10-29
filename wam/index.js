@@ -15,11 +15,18 @@ const PARAMS = [
     { id: 'attack', label: 'Attack', defaultValue: 0.1, units: '%', text: (v) => percent(v) },
     { id: 'release', label: 'Release', defaultValue: 0.4, units: '%', text: (v) => percent(v) },
     { id: 'volume', label: 'Volume', defaultValue: 0.8, units: '%', text: (v) => percent(v) },
+    { id: 'bend', label: 'Pitch bend', defaultValue: 0.5, units: 'st', text: (v) => semitones(v) },
+    { id: 'modulation', label: 'Modulation', defaultValue: 0, units: '%', text: (v) => percent(v) },
 ];
 
 function hz(v) {
     const f = 20 * Math.pow(1000, v);
     return f >= 1000 ? `${(f / 1000).toFixed(1)} kHz` : `${Math.round(f)} Hz`;
+}
+
+function semitones(v) {
+    const st = (v - 0.5) * 4;
+    return `${st > 0 ? '+' : ''}${st.toFixed(2)} st`;
 }
 
 function percent(v) {
